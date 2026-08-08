@@ -2,6 +2,7 @@ from tkinter import *
 from random import *
 from time import sleep, time
 
+main_mission = 1
 debug = False
 
 def update_health(current_health):
@@ -557,6 +558,55 @@ def roll_event():
         option1.place(relx = 0.33, rely = 0.8, anchor = CENTER)
         option2 = Button(event_win, text="Leave the village alone", font=("Arial", 16), width=20, command=opt2)
         option2.place(relx = 0.67, rely = 0.8, anchor = CENTER)
+    elif roll == 4:
+        if main_mission == 1:
+            if not (inventory.get("radio", {}).get("quantity", 0) > 0 or inventory.get("transmitter", {}).get("quantity", 0) > 0) and inventory.get("receiver", {}).get("quantity", 0) > 0:
+                def opt1():
+                    event_msg("You listen to the signal. It's the captain of a cruise ship nearby the island.", font=("Arial", 16, "bold"))
+                    event_win.destroy()
+                
+                event = Label(event_win, text="Your receiver is picking up a signal with a mysterious origin. However, you have no way to respond.", font=("Arial", 20, "bold"), wraplength=300)
+                event.place(relx = 0.5, rely = 0.5, anchor = CENTER)
+                option = Button(event_win, text="Listen to the signal", font=("Arial", 16), width=20, command=opt1)
+                option.place(relx = 0.5, rely = 0.8, anchor = CENTER)
+            elif inventory.get("radio", {}).get("quantity", 0) > 0 or (inventory.get("transmitter", {}).get("quantity", 0) > 0 and inventory.get("receiver", {}).get("quantity", 0) > 0):
+                def opt1():
+                    def opt1a():
+                        event_msg("You begin to speak. Before you can explain the situation, the signal cuts off. The captain doesn't know you are, but he knows you're there.", font=("Arial", 16, "bold"), duration=4000)
+                        event_win.destroy()
+                        main_mission == 2
+                    def opt1b():
+                        event_msg("You ignore the signal.", font=("Arial", 16, "bold"))
+                        event_win.destroy()
+
+                    event.config(text="You listen to the signal. It's the captain of a cruise ship nearby the island.")
+                    option1.config(text="Respond to the signal", command=opt1a)
+                    option2.config(text="Ignore the signal", command=opt1b)
+                def opt2():
+                    event_msg("You ignore the signal.", font=("Arial", 16, "bold"))
+                    event_win.destroy()
+
+                if inventory.get("radio", {}).get("quantity", 0) > 0:
+                    event = Label(event_win, text="Your radio is picking up a signal with a mysterious origin.", font=("Arial", 20, "bold"), wraplength=300)
+                else:
+                    event = Label(event_win, text="Your receiver is picking up a signal with a mysterious origin.", font=("Arial", 20, "bold"), wraplength=300)
+                event.place(relx = 0.5, rely = 0.5, anchor = CENTER)
+                option1 = Button(event_win, text="Listen to the signal", font=("Arial", 16), width=20, command=opt1)
+                option1.place(relx = 0.33, rely = 0.8, anchor = CENTER)
+                option2 = Button(event_win, text="Ignore the signal", font=("Arial", 16), width=20, command=opt2)
+                option2.place(relx = 0.67, rely = 0.8, anchor = CENTER)
+    elif roll == 5:
+        pass
+    elif roll == 6:
+        pass
+    elif roll == 7:
+        pass
+    elif roll == 8:
+        pass
+    elif roll == 9:
+        pass
+    elif roll == 10:
+        pass
 
 
 crafting_recipes = {
