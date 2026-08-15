@@ -501,20 +501,20 @@ def starve(num=10):
     hunger -= num
     update_hunger(hunger)
 
-def sickness(num: int):
-    global sick
+def sickness(num=None):
+    global sick, sicklbl
     if num:
         sick = max(0, sick - num)
         return
 
     if sick > 0:
-        if not sick-lbl:
-            sick-lbl = True
+        if not sicklbl:
+            sicklbl = True
             sick_lbl.place(relx = 0.5, rely = 0.1, anchor = CENTER)
         sick -= 1
         take_damage(10)
         if sick <= 0:
-            sick-lbl = False
+            sicklbl = False
             sick_lbl.forget()
         
 
@@ -1060,8 +1060,15 @@ def crafting():
         recipe = crafting_recipes[recipe_key]
         result = recipe_key
         amount = recipe["quantity"]
-        if not can_add_item(result, amount):
-            return False, f"Your inventory is full. You need {amount} free space to craft this."
+
+        # How many spaces will be freed by removing the ingredients?
+        spaces_freed = sum(recipe["ingredients"].values())
+        # How many spaces will the result take?
+        spaces_needed = amount
+        net = spaces_needed - spaces_freed
+
+        if net > 0 and inventory_space() < net:
+            return False, f"Your inventory is full. You need {net} more free space to craft this."
 
         # Check requirement (workbench / furnace etc.)
         req = recipe["requirements"]
@@ -1967,25 +1974,25 @@ enemy_data = {
 
 def on_boar_win():
     event_msg(msg="You defeated the wild boar and found some raw meat!")
-    add_item("raw_meat", 3)
-    add_item("hide", 1)
-    add_item("tusk", 1)
+    add_item("raw_meat", 3, cont=True)
+    add_item("hide", 1, cont=True)
+    add_item("tusk", 1, cont=True)
 
 def on_boar_lose():
     event_msg(msg="The boar left you badly wounded...")
 
 def on_wolf_win():
     event_msg(msg="You defeated the island wolf and found some raw meat!")
-    add_item("raw_meat", 1)
-    add_item("fur", 1)
+    add_item("raw_meat", 1, cont=True)
+    add_item("fur", 1, cont=True)
 
 def on_wolf_lose():
     event_msg(msg="The wolf left you badly wounded...")
 
 def on_crab_win():
     event_msg(msg="You defeated the giant crab and found some raw meat!")
-    add_item("raw_meat", 2)
-    add_item("shell", 1)
+    add_item("raw_meat", 2, cont=True)
+    add_item("shell", 1, cont=True)
 
 def on_crab_lose():
     event_msg(msg="The crab left you badly wounded...")
@@ -3010,7 +3017,7 @@ day += 1
 day_counter = Label(game, text = f"Day {day}", font=("Arial", 20, "bold"))
 day_counter.place(relx = 0.5, rely = 0.05, anchor = CENTER)
 sick_lbl = Label(game, text="SICK", font=("Arial", 20, "bold"), fg="#94b21c")
-sick-lbl = False
+sicklbl = False
 escaped = False
 alive = True
 
