@@ -1,6 +1,6 @@
 from tkinter import *
 from random import *
-from time import sleep, time
+import sys
 
 def inventory_total():
     """Return the number of individual items currently held."""
@@ -36,7 +36,7 @@ def add_item(item_key, amount=1, scavenging=False, cont=False):
 
     if item_key not in inventory:
         inventory[item_key] = {
-            "name": item_key.replace("_", " ").capitalize(),
+            "name": item_key.replace("_", " ").title(),
             "quantity": 0,
             "durability": None,
             "nutrition": None,
@@ -186,7 +186,9 @@ def start_battle(enemy_key, on_win=None, on_lose=None):
                 battle.after(2000, battle.destroy)
 
     def get_melee_weapons():
-        return [w for w in melee_template if inventory.get(w, {}).get("quantity", 0) > 0]
+        result = ["punch"]
+        result.append(w for w in melee_template if inventory.get(w, {}).get("quantity", 0) > 0)
+        return result
 
     def get_ranged_weapons():
         result = []
@@ -209,7 +211,10 @@ def start_battle(enemy_key, on_win=None, on_lose=None):
         Label(weapon_frame, text=f"Select {kind} weapon:", font=("Arial", 11, "bold")).pack()
 
         for w in weapons:
-            dmg = melee_template[w] if kind == "melee" else ranged_template[w][0]
+            if w == "punch":
+                dmg = 5
+            else:
+                dmg = melee_template[w] if kind == "melee" else ranged_template[w][0]
             ammo_txt = ""
             if kind == "ranged" and ranged_template[w][1]:
                 ammo = ranged_template[w][1]
@@ -230,7 +235,10 @@ def start_battle(enemy_key, on_win=None, on_lose=None):
         for child in weapon_frame.winfo_children():
             child.destroy()
 
-        dmg = melee_template[weapon] if kind == "melee" else ranged_template[weapon][0]
+        if weapon == "punch":
+            dmg = 5
+        else:
+            dmg = melee_template[weapon] if kind == "melee" else ranged_template[weapon][0]
         Label(weapon_frame, text=f"Selected: {weapon.replace('_', ' ').title()} ({dmg} dmg)",
               font=("Arial", 11)).pack()
         Button(weapon_frame, text="ATTACK!", font=("Arial", 12, "bold"),
@@ -239,8 +247,8 @@ def start_battle(enemy_key, on_win=None, on_lose=None):
 
     def lose_durability(weapon):
         """Reduce durability of a weapon. Returns True if it broke."""
-        if weapon not in inventory:
-            return True
+        if weapon == "punch" or weapon not in inventory:
+            return False
         data = inventory[weapon]
         if "durability" not in data:
             return False
@@ -273,7 +281,9 @@ def start_battle(enemy_key, on_win=None, on_lose=None):
             return
 
         weapon, kind = current_weapon
-        if kind == "melee":
+        if weapon == "punch":
+            damage = 5
+        elif kind == "melee":
             damage = melee_template[weapon]
         else:
             damage = ranged_template[weapon][0]
@@ -444,7 +454,7 @@ def wear_tool(tool_key):
         data["quantity"] -= 1
         if data["quantity"] <= 0:
             del inventory[tool_key]
-        event_msg(f"Your {tool_key.replace('_', ' ').capitalize()} broke!", ry=0.8)
+        event_msg(f"Your {tool_key.replace('_', ' ').title()} broke!", ry=0.8)
         return True
     return False
 
@@ -490,6 +500,23 @@ def starve(num=10):
     global hunger
     hunger -= num
     update_hunger(hunger)
+
+def sickness(num: int):
+    global sick
+    if num:
+        sick = max(0, sick - num)
+        return
+
+    if sick > 0:
+        if not sick-lbl:
+            sick-lbl = True
+            sick_lbl.place(relx = 0.5, rely = 0.1, anchor = CENTER)
+        sick -= 1
+        take_damage(10)
+        if sick <= 0:
+            sick-lbl = False
+            sick_lbl.forget()
+        
 
 def get_best_tools():
     global best_pickaxe, best_axe, best_sword, best_container, best_rest
@@ -544,7 +571,7 @@ def get_best_tools():
     else:
         best_container = None
     if inventory.get("advanced_camp", {}).get("quantity", 0) > 0:
-        best_rest = "advanced_shelter"
+        best_rest = "advanced_camp"
     elif inventory.get("fortified_camp", {}).get("quantity", 0) > 0:
         best_rest = "fortified_camp"
     elif inventory.get("improved_shelter", {}).get("quantity", 0) > 0:
@@ -574,7 +601,7 @@ def durability_check():
                     data["quantity"] -= 1
                 if data["quantity"] <= 0 or not dur:
                     del inventory[item]
-                    event_msg(f"Your {item.replace('_', ' ').capitalize()} broke!", ry=0.8)
+                    event_msg(f"Your {item.replace('_', ' ').title()} broke!", ry=0.8)
     get_best_tools()
 
 def get_scavenge_chances():
@@ -597,7 +624,7 @@ def get_scavenge_chances():
 current_event = None
 event_after_id = None
 
-def event_msg(msg="", font=("Arial", 16), duration=2000, rx=0.5, ry=0.5, wait=False, stop=False):
+def event_msg(msg="", font=("Arial", 16), duration=2000, rx=0.5, ry=0.5, wait=False, start=False):
     global current_event, event_after_id
 
     if msg == "":
@@ -624,7 +651,7 @@ def event_msg(msg="", font=("Arial", 16), duration=2000, rx=0.5, ry=0.5, wait=Fa
 
     if wait or duration == 0:
         game.wait_variable(wait_var)
-        game.after(duration, lambda: clear_event_msg(pause=stop))
+        game.after(duration, lambda: clear_event_msg(paused=start))
     elif duration > 0:
         event_after_id = game.after(duration, clear_event_msg)
 
@@ -642,6 +669,8 @@ def clear_event_msg(paused=False):
     event_after_id = None
 
 def invsee():
+    if health <= 0:
+        return
     if not inventory:
         event_msg(msg="Your inventory is empty.")
         return
@@ -718,7 +747,6 @@ def invsee():
         drop_warning.pack_forget()
 
     def consume_item(item_key):
-        global sick
         if item_key not in inventory:
             return
 
@@ -743,11 +771,11 @@ def invsee():
                 event_msg(f"You consumed {name}. +{nutrition} hunger.")
         elif item_key.startswith("raw_") and randint(1, 100) <= 30:
             event_msg(f"You consumed {name}. +{nutrition} hunger, but you feel sick.")
-            sick += 2
+            sickness(num=2)
         elif item_key == "herbal_medicine":
             heal(15)
-            sick = max(0, sick - 4)
-            event_msg(f"You consumed {name} and cured yourself of your sickness.")
+            sickness(num=-4)
+            event_msg(f"You consumed {name} and treated your sickness.")
         else:
             event_msg(f"You consumed {name}. +{nutrition} hunger.")
         
@@ -778,7 +806,7 @@ def invsee():
         # Restore
         if item_key not in inventory:
             inventory[item_key] = {
-                "name": item_key.replace("_", " ").capitalize(),
+                "name": item_key.replace("_", " ").title(),
                 "quantity": 0
             }
         inventory[item_key]["quantity"] = original_qty
@@ -930,6 +958,8 @@ def update_inventory_capacity():
 
 def scavenge():
     global inventory
+    if health <= 0:
+        return
     if inventory_total() >= inv_max:
         event_msg(msg="Your inventory is full. You cannot scavenge until you free up some space.")
     elif stamina < 10:
@@ -964,7 +994,7 @@ def scavenge():
                             wear_tool(best_axe)
                     durability_check()
         if found:
-            lines = [f"{qty} × {item.replace('_', ' ').capitalize()}" for item, qty in found.items()]
+            lines = [f"{qty} × {item.replace('_', ' ').title()}" for item, qty in found.items()]
             msg = "You found:\n" + "\n".join(lines)
             if inventory_total() >= inv_max:
                 msg = "Your inventory is full. You couldn't carry everything you found.\n" + msg
@@ -977,6 +1007,8 @@ def scavenge():
             print(f"Found: {found}")
 
 def crafting():
+    if health <= 0:
+        return
     craft_win = Toplevel(game)
     craft_win.title("Crafting")
     craft_win.geometry("750x550")
@@ -1035,7 +1067,7 @@ def crafting():
         req = recipe["requirements"]
         if req is not None:
             if inventory.get(req, {}).get("quantity", 0) <= 0:
-                return False, f"Missing requirement: {req.replace('_', ' ').capitalize()}"
+                return False, f"Missing requirement: {req.replace('_', ' ').title()}"
 
         # Check ingredients
         missing = []
@@ -1082,7 +1114,7 @@ def crafting():
 
     def show_details(recipe_key):
         recipe = crafting_recipes[recipe_key]
-        nice_name = recipe_key.replace('_', ' ').capitalize()
+        nice_name = recipe_key.replace('_', ' ').title()
 
         title_lbl.config(text=nice_name)
         produces_lbl.config(text=f"Produces: {recipe['quantity']} × {nice_name}")
@@ -1092,7 +1124,7 @@ def crafting():
         for item, needed in recipe["ingredients"].items():
             owned = inventory.get(item, {}).get("quantity", 0)
             status = "✓" if owned >= needed else "✗"
-            lines.append(f"  {status}  {item.replace('_', ' ').capitalize()}: {owned} / {needed}")
+            lines.append(f"  {status}  {item.replace('_', ' ').title()}: {owned} / {needed}")
         ingredients_lbl.config(text="\n".join(lines))
 
         # Requirement
@@ -1102,7 +1134,7 @@ def crafting():
         else:
             owned_req = inventory.get(req, {}).get("quantity", 0)
             mark = "✓" if owned_req > 0 else "✗"
-            req_lbl.config(text=f"Requirement: {mark}  {req.replace('_', ' ').capitalize()}")
+            req_lbl.config(text=f"Requirement: {mark}  {req.replace('_', ' ').title()}")
 
         # Can we craft?
         possible, message = can_craft(recipe_key)
@@ -1116,7 +1148,7 @@ def crafting():
 
     # Create a button for every recipe
     for recipe_key in sorted(crafting_recipes.keys()):
-        name = recipe_key.replace('_', ' ').capitalize()
+        name = recipe_key.replace('_', ' ').title()
         btn = Button(
             button_frame,
             text=name,
@@ -1136,7 +1168,7 @@ def proceed():
     wait_var.set(True)
 
 def roll_event():
-    global inventory, main_mission, active_beacon, mission1, mission2, mission3, mission4, mission5, mission6, mission7, mission8, rejected, escaped, abandoned_ship, abandoned_ufo
+    global inventory, main_mission, active_beacon, mission1, mission2, mission3, mission4, mission5, mission6, mission7, mission8, rejected, escaped, abandoned_ship, abandoned_ufo, active_advanced_beacon, active_beacon
     if active_advanced_beacon:
         main_mission = 8
     elif (inventory.get("advanced_receiver", {}).get("quantity", 0) > 0 or inventory.get("advanced_radio", {}).get("quantity", 0) > 0) and inventory.get("advanced_signal_booster", {}).get("quantity", 0) > 0 and inventory.get("advanced_emergency_beacon", {}).get("quantity", 0) > 0 and not abandoned_ufo:
@@ -1253,7 +1285,7 @@ def roll_event():
                 # Clean getaway
                 found = roll_village_loot(rolls=8)
                 if found:
-                    lines = [f"{qty} × {item.replace('_', ' ').capitalize()}" for item, qty in found.items()]
+                    lines = [f"{qty} × {item.replace('_', ' ').title()}" for item, qty in found.items()]
                     event.config(
                         text="You slipped through the village unnoticed and grabbed what you could:\n" + "\n".join(lines)
                     )
@@ -1266,7 +1298,7 @@ def roll_event():
                     found = roll_village_loot(rolls=5)
                     take_damage(5)
                     if found:
-                        lines = [f"{qty} × {item.replace('_', ' ').capitalize()}" for item, qty in found.items()]
+                        lines = [f"{qty} × {item.replace('_', ' ').title()}" for item, qty in found.items()]
                         event.config(
                             text="The villagers spotted you! You fought them off (lost 5 health) and still escaped with:\n" + "\n".join(lines)
                         )
@@ -1276,9 +1308,8 @@ def roll_event():
                         )
                 else:
                     take_damage(20)
-                    event_msg(
-                        "The villagers caught you raiding their homes. Without a proper weapon you were badly beaten and lost 20 health.",
-                        font=("Arial", 16, "bold")
+                    event.config(
+                        text="The villagers caught you raiding their homes. Without a proper weapon you were badly beaten and lost 20 health.",
                     )
 
             else:
@@ -1297,10 +1328,13 @@ def roll_event():
             font=("Arial", 18, "bold"),
             wraplength=500,
             justify="center"
-        ).place(relx=0.5, rely=0.4, anchor=CENTER)
+        )
+        event.place(relx=0.5, rely=0.4, anchor=CENTER)
 
-        option1 = Button(event_win, text="Raid the village", font=("Arial", 16), width=20, command=opt1).place(relx=0.33, rely=0.8, anchor=CENTER)
-        option2 = Button(event_win, text="Leave them alone", font=("Arial", 16), width=20, command=opt2).place(relx=0.67, rely=0.8, anchor=CENTER)
+        option1 = Button(event_win, text="Raid the village", font=("Arial", 16), width=20, command=opt1)
+        option1.place(relx=0.33, rely=0.8, anchor=CENTER)
+        option2 = Button(event_win, text="Leave them alone", font=("Arial", 16), width=20, command=opt2)
+        option2.place(relx=0.67, rely=0.8, anchor=CENTER)
     elif 31 <= roll <= 40:
         if main_mission == 1:
             event_win = Toplevel(game)
@@ -2915,9 +2949,11 @@ inv_max = 10
 inventory = {}
 
 game = Tk()
+photo = PhotoImage(file = "IslandSurvivallogo.png")
 game.title("Island Survival")
 game.geometry('1920x1080')
 game.state('zoomed')
+game.iconphoto(True, photo)
 wait_var = BooleanVar(value=False)
 
 menubar = Menu(game)
@@ -2930,37 +2966,34 @@ menubar.add_command(label ='Quit', command = game.destroy)
 advance = Button(game, text="Advance", command=proceed, font=("Arial", 20, "bold"))
 advance.place(relx = 0.5, rely = 0.95, anchor = CENTER)
 
-event = Label(game, text="Welcome!", font=("Arial", 20, "bold"), wraplength=300)
-event.place(relx = 0.5, rely = 0.5, anchor = CENTER)
-game.wait_variable(wait_var)
-event.destroy()
-event_msg(msg="You find yourself on a desert island with no supplies or memory of how you got there.", font=("Arial", 16), duration=0)
-event_msg(msg="Now, you have only one goal…", font=("Arial", 16), duration=0)
-event_msg(msg="SURVIVE", font=("Arial", 20, "bold"), duration=0)
+event_msg(msg="Welcome!", font=("Arial", 20, "bold"), wait=True, duration=86400000)
+event_msg(msg="You find yourself on a desert island with no supplies or memory of how you got there.", font=("Arial", 16), wait=True, duration=86400000)
+event_msg(msg="Now, you have only one goal…", font=("Arial", 16), wait=True, duration=86400000)
+event_msg(msg="SURVIVE", font=("Arial", 20, "bold"), wait=True, duration=86400000)
 
 game.config(menu = menubar)
 
-healthbar = Canvas(game, width=200, height=25, bg="red", highlightthickness=0)
+healthbar = Canvas(game, width=200, height=25, bg="#c0392b", highlightthickness=0)
 healthbar.place(relx = 0.18, rely = 0.05, anchor = "w")
-health_bar = healthbar.create_rectangle(0, 0, 200, 25, fill="green", width=0)
+health_bar = healthbar.create_rectangle(0, 0, 200, 25, fill="#2ecc71", width=0)
 hp = Label(game, text = f"Health: {health}%", font=("Arial", 20, "bold"))
 hp.place(relx = 0, rely = 0.05, anchor = "w")
 
-staminabar = Canvas(game, width=200, height=25, bg="blue", highlightthickness=0)
+staminabar = Canvas(game, width=200, height=25, bg="#2c3e50", highlightthickness=0)
 staminabar.place(relx = 0.18, rely = 0.1, anchor = "w")
-stamina_bar = staminabar.create_rectangle(0, 0, 200, 25, fill="yellow", width=0)
+stamina_bar = staminabar.create_rectangle(0, 0, 200, 25, fill="#f1c40f", width=0)
 sp = Label(game, text = f"Stamina: {stamina}%", font=("Arial", 20, "bold"))
 sp.place(relx = 0, rely = 0.1, anchor = "w")
 
-hungerbar = Canvas(game, width=200, height=25, bg="lightblue", highlightthickness=0)
+hungerbar = Canvas(game, width=200, height=25, bg="#5d4e37", highlightthickness=0)
 hungerbar.place(relx = 0.18, rely = 0.15, anchor = "w")
-hunger_bar = hungerbar.create_rectangle(0, 0, 200, 25, fill="brown", width=0)
+hunger_bar = hungerbar.create_rectangle(0, 0, 200, 25, fill="#e67e22", width=0)
 hup = Label(game, text = f"Hunger: {hunger}%", font=("Arial", 20, "bold"))
 hup.place(relx = 0, rely = 0.15, anchor = "w")
 
-hydrationbar = Canvas(game, width=200, height=25, bg="orange", highlightthickness=0)
+hydrationbar = Canvas(game, width=200, height=25, bg="#1a5276", highlightthickness=0)
 hydrationbar.place(relx = 0.18, rely = 0.2, anchor = "w")
-hydration_bar = hydrationbar.create_rectangle(0, 0, 200, 25, fill="lightblue", width=0)
+hydration_bar = hydrationbar.create_rectangle(0, 0, 200, 25, fill="#3498db", width=0)
 hyp = Label(game, text = f"Hydration: {hydration}%", font=("Arial", 20, "bold"))
 hyp.place(relx = 0, rely = 0.2, anchor = "w")
 
@@ -2976,6 +3009,8 @@ craft.place(relx = 1, rely = 0.25, anchor = "e")
 day += 1
 day_counter = Label(game, text = f"Day {day}", font=("Arial", 20, "bold"))
 day_counter.place(relx = 0.5, rely = 0.05, anchor = CENTER)
+sick_lbl = Label(game, text="SICK", font=("Arial", 20, "bold"), fg="#94b21c")
+sick-lbl = False
 escaped = False
 alive = True
 
@@ -2995,9 +3030,7 @@ while alive and not escaped:
     day += 1
     day_counter.config(text=f"Day {day}")
 
-    if sick > 0:
-        sick -= 1
-        take_damage(10)
+    sickness()
 
     # Bedroll bonus (does not cost hunger)
     if randint(1, 2) == 1 and best_rest:
@@ -3019,32 +3052,33 @@ while alive and not escaped:
     if hydration == 0:
         take_damage(40)
 
-    # Convert hunger → stamina (only as much as you have)
-    available = min(5, hunger)
+    needed = min(5, 100 - stamina)      # only convert what you can actually use
+    available = min(needed, hunger)
+
     if available > 0:
-        recharge(available)          # this also calls starve(available)
-    else:
-        # Completely starving – take damage instead of free stamina
+        recharge(available)             # gains stamina + loses hunger
+    elif hunger == 0:
         take_damage(8)
-        event_msg(msg="You are starving! You take damage.", duration=1500)
+        event_msg("You are starving! You take damage.", duration=1500)
 
     roll_event()
     game.wait_variable(wait_var)
 
-game.config(menu = None)
-staminabar.destroy()
-sp.destroy()
 scav.destroy()
 inv.destroy()
 craft.destroy()
 
 if not alive:
-    event_msg(msg="You have died. Game over.", font=("Arial", 20, "bold"), duration=0)
+    end = "You have died. Game over."
+    event_msg(msg=end, font=("Arial", 20, "bold"), duration=0)
     advance.config(text="End")
 elif escaped:
-    event_msg(msg="Congratulations! You have escaped the island!", font=("Arial", 20, "bold"), duration=0)
+    end = "Congratulations! You have escaped the island!"
+    event_msg(msg=end, font=("Arial", 20, "bold"), duration=0)
     advance.config(text="Leave")
 
 game.wait_variable(wait_var)
 
 game.destroy()
+
+sys.quit(end)
