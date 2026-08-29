@@ -16,7 +16,7 @@ jobs:
         include:
           - os: windows-latest
             artifact_name: IslandSurvival-Windows
-            build_cmd: pyinstaller --add-data "IslandSurvivallogo.png;" --name "IslandSurvival" --noconfirm --windowed island_survival.py
+            build_cmd: pyinstaller --add-data "IslandSurvivallogo.png;." --name "IslandSurvival" --noconfirm --windowed island_survival.py
           - os: macos-latest
             artifact_name: IslandSurvival-macOS
             build_cmd: pyinstaller --add-data "IslandSurvivallogo.png:." --name "IslandSurvival" --noconfirm --windowed island_survival.py
