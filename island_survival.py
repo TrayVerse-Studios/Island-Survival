@@ -1,6 +1,16 @@
 from tkinter import *
 from random import *
 import sys
+import os
+
+def resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
 
 def inventory_total():
     """Return the number of individual items currently held."""
@@ -2956,7 +2966,7 @@ inv_max = 10
 inventory = {}
 
 game = Tk()
-photo = PhotoImage(file = "IslandSurvivallogo.png")
+photo = PhotoImage(file=resource_path("IslandSurvivallogo.png"))
 game.title("Island Survival")
 game.geometry('1920x1080')
 game.state('zoomed')
@@ -3088,4 +3098,4 @@ game.wait_variable(wait_var)
 
 game.destroy()
 
-sys.quit(end)
+sys.exit(end)
