@@ -38,8 +38,6 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install pyinstaller
-          # Uncomment the line below if your game requires libraries like pygame or customtkinter:
-          # pip install -r requirements.txt
 
       - name: Build Application with PyInstaller
         run: ${{ matrix.build_cmd }}
