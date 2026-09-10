@@ -36,6 +36,7 @@ class OptionDialog(Toplevel):
         self.question = question
         self.transient(parent)
         self.protocol("WM_DELETE_WINDOW", blank)
+        self.iconphoto(True, logo)
         self.options = options
         self.result = '_'
         self.createWidgets()
@@ -59,7 +60,7 @@ class OptionDialog(Toplevel):
         self.destroy()
 
 def link(url: str):
-    webbrowser.open_new(url)
+    webbrowser.open_new_tab(url)
 
 def get_game_state():
     """Gathers all important variables into a dictionary."""
@@ -3549,6 +3550,7 @@ def start_menu():
     menu_win.focus_force()
     menu_win.iconphoto(True, logo)
     menu_win.state("zoomed")
+    menu_win.iconphoto(True, logo)
 
     Label(
         menu_win, image=logo, bg="#222222"
