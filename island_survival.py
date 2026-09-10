@@ -1055,8 +1055,8 @@ def event_msg(msg=[], font=("Arial", 16)):
     
     eventmsg = Label(event_msg_win, text="", font=font, wraplength=700, justify=CENTER)
     eventmsg.place(relx=0.5, rely=0.5, anchor=CENTER)
-    advance = Button(event_msg_win, text="Advance", command=proceed, font=("Arial", 20, "bold"))
-    advance.place(relx=0.5, rely=0.95, anchor=CENTER)
+    advancemsg = Button(event_msg_win, text="Advance", command=proceed, font=("Arial", 20, "bold"))
+    advancemsg.place(relx=0.5, rely=0.95, anchor=CENTER)
 
     for message in msg:
         eventmsg.config(text=message)
@@ -1065,7 +1065,7 @@ def event_msg(msg=[], font=("Arial", 16)):
 
     game_log = game_log + "\n"
     
-    advance.destroy()
+    advancemsg.destroy()
 
     Button(event_msg_win, text="Continue", command=close_event).pack(pady=15)
 
@@ -3449,7 +3449,7 @@ game.iconphoto(True, logo)
 
 game.title("Island Survival")
 game.iconphoto(True, logo)
-game.protocol("WM_DELETE_WINDOW", blank)
+game.protocol("WM_DELETE_WINDOW", quit_game)
 # Note: We don't zoom or show the window yet. We wait for the menu.
 
 # --- 2. Wrap UI Setup in a Function ---
@@ -3586,8 +3586,6 @@ def start_menu():
               command=on_load_game).place(relx=0.25, rely=0.4, anchor=CENTER)
     Button(menu_win, text="Quit", font=("Arial", 20), width=15,
               command=on_quit).place(relx=0.25, rely=0.5, anchor=CENTER)
-
-    menu_win.protocol("WM_DELETE_WINDOW", blank)
 
 # Hide the empty game window only AFTER the menu exists
 game.withdraw()
