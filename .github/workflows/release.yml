@@ -157,16 +157,26 @@ jobs:
 
       - name: Package dist folder
         shell: bash
+        env:
+          VERSION: ${{ needs.check-version.outputs.version }}
+          ARTIFACT: ${{ matrix.artifact_name }}
         run: |
           set -euo pipefail
-          VERSION='${{ needs.check-version.outputs.version }}'
           mkdir -p packaged
-          if [ -d dist ]; then
-            (cd dist && zip -r "../packaged/${{ matrix.artifact_name }}-${VERSION}.zip" .)
-          else
+          if [ ! -d dist ]; then
             echo "::error::PyInstaller did not produce a dist/ folder."
             exit 1
           fi
+          python - <<'PY'
+          import os, zipfile
+          out = os.path.join("packaged", f"{os.environ['ARTIFACT']}-{os.environ['VERSION']}.zip")
+          with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as zf:
+              for root, _, files in os.walk("dist"):
+                  for name in files:
+                      path = os.path.join(root, name)
+                      zf.write(path, os.path.relpath(path, "dist"))
+          print("Wrote", out)
+          PY
           ls -la packaged
 
       - name: Upload build artifact
