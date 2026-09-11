@@ -251,7 +251,7 @@ def play_game(new=True):
 def quit_game():
     global save
     if messagebox.askyesno("Quit Game", "Are you sure you want to quit?"):
-        if os.path.ispath(save):
+        if os.path.isfile(save):
             save_game()
         elif messagebox.askyesno("Save", "Do you want to save before quitting?"):
             save_game(new=True)
@@ -282,7 +282,7 @@ def can_add_item(item_key, amount=1):
 
 
 def add_item(item_key, amount=1, looting=False, cont=False, loot_table: dict=None):
-    global item_description
+    global item_descriptions
     """
     Add an item to the inventory if there is enough capacity.
 
@@ -304,9 +304,9 @@ def add_item(item_key, amount=1, looting=False, cont=False, loot_table: dict=Non
             "name": item_key.replace("_", " ").title(),
             "quantity": 0,
             "durability": None,
-            "nutrition": None,
-            "hydration": None,
-            "description": item_description.get(item_key, "")
+            "nutrition": 0,
+            "hydration": 0,
+            "description": item_descriptions.get(item_key, "")
         }
 
     if item_key in durability_template:
@@ -341,17 +341,19 @@ def roll_loot(loot_table: dict, rolls: int = 8, looting: bool = False, cont=Fals
     Returns a dictionary of the items successfully found.
     """
     found = {}
-    for _ in range(rolls):
+    count = 0
+    while count < rolls:
         for item, chance in loot_table.items():
+            count += 1
             if randint(1, 1000) <= chance * 1000:
                 success, _ = add_item(item, looting=looting, loot_table=loot_table, cont=cont)
                 if success:
-                    found[item] = found.get(item, 0) + 1
                     if item in container_for_water:
                         container = container_for_water[item]
                         if inventory.get(container, {}).get("quantity", 0) <= 0:
                             continue
                         remove_item(container)
+                    found[item] = found.get(item, 0) + 1
     return found
 
 def remove_item(item_key, amount=1):
@@ -1047,27 +1049,30 @@ def event_msg(msg=[], font=("Arial", 16)):
     event_msg_win.grab_set()
     event_msg_win.protocol("WM_DELETE_WINDOW", blank)
     event_msg_win.iconphoto(True, logo)
-            
-    def close_event():
-        event_msg_win.destroy()
-        proceed()
 
-    
+    wait_var_msg = BooleanVar(value=False)
+
+    def proceed_msg():
+        wait_var_msg.set(True)
+
     eventmsg = Label(event_msg_win, text="", font=font, wraplength=700, justify=CENTER)
     eventmsg.place(relx=0.5, rely=0.5, anchor=CENTER)
-    advancemsg = Button(event_msg_win, text="Advance", command=proceed, font=("Arial", 20, "bold"))
-    advancemsg.place(relx=0.5, rely=0.95, anchor=CENTER)
+    advancemsg = Button(event_msg_win, text="Advance", command=proceed_msg, font=("Arial", 20, "bold"))
 
     for message in msg:
+        if message == msg[-1]:
+            advancemsg.destroy()
+        else:
+            advancemsg.place(relx=0.5, rely=0.95, anchor=CENTER)
         eventmsg.config(text=message)
         game_log = game_log + f"{message}\n"
-        event_msg_win.wait_variable(wait_var)
+        if len(msg) > 1 and message != msg[-1]:
+            event_msg_win.wait_variable(wait_var_msg)
+            advancemsg.place_forget()
 
     game_log = game_log + "\n"
-    
-    advancemsg.destroy()
 
-    Button(event_msg_win, text="Continue", command=close_event).pack(pady=15)
+    Button(event_msg_win, text="Continue", command=event_msg_win.destroy).pack(pady=15)
 
 def filter_keys(keys, query):
     """Return keys whose name or key matches the search text."""
@@ -1133,19 +1138,22 @@ def invsee():
     qty_lbl.pack(anchor="w")
 
     dur_lbl = Label(right, text="", font=("Arial", 14))
-    dur_lbl.pack(anchor="w", pady=(8, 0))
+    dur_lbl.pack(anchor="w", pady=(4, 0))
+
+    nutrition_lbl = Label(right, text="", font=("Arial", 14))
+    nutrition_lbl.pack(anchor="w", pady=(4, 0))
+
+    hydration_lbl = Label(right, text="", font=("Arial", 14))
+    hydration_lbl.pack(anchor="w", pady=(4, 0))
+
+    damage_lbl = Label(right, text="", font=("Arial", 14))
+    damage_lbl.pack(anchor="w", pady=(4, 0))
 
     desc = Label(right, text="", font=("Arial", 12), fg="gray", justify=CENTER, wraplength=350)
     desc.pack(anchor="w", pady=(8, 0))
 
-    nutrition_lbl = Label(right, text="", font=("Arial", 14))
-    nutrition_lbl.pack(anchor="w", pady=(8, 0))
-
-    damage_lbl = Label(right, text="", font=("Arial", 14))
-    damage_lbl.pack(anchor="w", pady=(8, 0))
-
     extra_lbl = Label(right, text="", font=("Arial", 12), fg="gray", justify=LEFT)
-    extra_lbl.pack(anchor="w", pady=(15, 0))
+    extra_lbl.pack(anchor="w", pady=(4, 0))
 
     select_btn = Button(right, text="Select", font=("Arial", 12), width=10)
     # Action buttons (created once)
@@ -1163,6 +1171,7 @@ def invsee():
         qty_lbl.config(text="")
         dur_lbl.config(text="")
         nutrition_lbl.config(text="")
+        hydration_lbl.config(text="")
         damage_lbl.config(text="")
         extra_lbl.config(text="")
         consume_btn.pack_forget()
@@ -1170,7 +1179,6 @@ def invsee():
         drop_warning.pack_forget()
         select_btn.pack_forget()
         desc.config(text="")
-        desc.pack_forget()
 
     def consume_item(item_key):
         if item_key not in inventory:
@@ -1313,6 +1321,11 @@ def invsee():
         else:
             nutrition_lbl.config(text="")
 
+        if "hydration" in data:
+            hydration_lbl.config(text=f"Hydration: {data['hydration']}")
+        else:
+            hydration_lbl.config(text="")
+
         # Attack damage
         if item_key in melee_template:
             damage_lbl.config(text=f"Attack Damage: {melee_template[item_key]}")
@@ -1341,7 +1354,6 @@ def invsee():
         consume_btn.pack_forget()
         drop_frame.pack_forget()
         drop_warning.pack_forget()
-        desc.pack_forget()
         # Consume button (food or drink)
         if item_key in food_template or item_key in drink_template:
             consume_btn.config(command=lambda k=item_key: consume_item(k))
@@ -1430,7 +1442,6 @@ def scavenge():
                 msg = msg + "\nYour inventory is full. You couldn't carry everything you found.\nYou found:\n" + "\n".join(lines)
             else:
                 msg = msg + "\nYou found:\n" + "\n".join(lines)
-            event_msg([msg])
         else:
             msg = msg + "\nYou found nothing."
         event_msg([msg])
@@ -2116,9 +2127,6 @@ def roll_event():
         event_animal_win.grab_set()
         event_animal_win.protocol("WM_DELETE_WINDOW", blank)
         event_animal_win.iconphoto(True, logo)
-        def close_event():
-            event_animal_win.destroy()
-            proceed()
 
         def opt1():
             event_animal_win.destroy()
@@ -2142,9 +2150,6 @@ def roll_event():
         event_enemy_win.grab_set()
         event_enemy_win.protocol("WM_DELETE_WINDOW", blank)
         event_enemy_win.iconphoto(True, logo)
-        def close_event():
-            event_enemy_win.destroy()
-            proceed()
 
         def opt1():
             event_enemy_win.destroy()
@@ -2176,9 +2181,6 @@ def roll_event():
         event_galaxium_win.grab_set()
         event_galaxium_win.protocol("WM_DELETE_WINDOW", blank)
         event_galaxium_win.iconphoto(True, logo)
-        def close_event():
-            event_galaxium_win.destroy()
-            proceed()
 
         def opt1():
             event_galaxium_win.destroy()
@@ -3427,7 +3429,7 @@ selected_container = None
 selected_rest = None
 
 
-inv_max = 10
+inv_max = 15
 inventory = {}
 
 # --- 1. Initialize Root Window ---
@@ -3450,6 +3452,7 @@ game.iconphoto(True, logo)
 game.title("Island Survival")
 game.iconphoto(True, logo)
 game.protocol("WM_DELETE_WINDOW", quit_game)
+game.geometry("1920x1080")
 # Note: We don't zoom or show the window yet. We wait for the menu.
 
 # --- 2. Wrap UI Setup in a Function ---
@@ -3549,6 +3552,7 @@ def start_menu():
     menu_win.grab_set()
     menu_win.focus_force()
     menu_win.iconphoto(True, logo)
+    menu_win.geometry("1920x1080")
     menu_win.state("zoomed")
     menu_win.iconphoto(True, logo)
 

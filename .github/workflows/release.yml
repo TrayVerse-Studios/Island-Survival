@@ -1,0 +1,255 @@
+name: Release
+# Creates a GitHub Release when version.json changes to a version that
+# is not already the latest published release.
+# Required file at the repo root (version.json):
+# {
+#   "version": "1.0.0",
+#   "name": "Island Survival 1.0.0",
+#   "prerelease": false,
+#   "description": "Notes shown at the top of the release."
+# }
+# The release tag and title use "version" (and optional "name").
+# "description" is placed first in the release body; GitHub's
+# automatically generated notes are appended after it.
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - version.json
+      - .github/workflows/release.yml
+      - wiki.md  # Added to trigger workflow when wiki is updated
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  check-version:
+    name: Check version.json
+    runs-on: ubuntu-latest
+    outputs:
+      should_release: ${{ steps.check.outputs.should_release }}
+      version: ${{ steps.check.outputs.version }}
+      tag: ${{ steps.check.outputs.tag }}
+      name: ${{ steps.check.outputs.name }}
+      description: ${{ steps.check.outputs.description }}
+      prerelease: ${{ steps.check.outputs.prerelease }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Compare version.json with the latest release
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [ ! -f version.json ]; then
+            echo "::error::version.json was not found at the repository root."
+            exit 1
+          fi
+          VERSION=$(jq -r '.version // empty' version.json)
+          NAME=$(jq -r '.name // empty' version.json)
+          DESC=$(jq -r '.description // empty' version.json)
+          PRERELEASE=$(jq -r '.prerelease // false' version.json)
+          
+          if [ -z "$VERSION" ] || [ "$VERSION" = "null" ]; then
+            echo "::error::version.json is missing a non-empty \"version\" field."
+            exit 1
+          fi
+          
+          TAG="$VERSION"
+          if [ -z "$NAME" ] || [ "$NAME" = "null" ]; then
+            NAME="$VERSION"
+          fi
+          
+          strip_v() {
+            echo "${1#v}"
+          }
+          
+          LATEST_TAG=""
+          if LATEST_JSON=$(gh api "repos/${{ github.repository }}/releases/latest" 2>/dev/null); then
+            LATEST_TAG=$(echo "$LATEST_JSON" | jq -r '.tag_name // empty')
+          fi
+          
+          SHOULD_RELEASE=true
+          REASON="No previous release found; this will be the first."
+          if [ -n "$LATEST_TAG" ]; then
+            if [ "$(strip_v "$TAG")" = "$(strip_v "$LATEST_TAG")" ]; then
+              SHOULD_RELEASE=false
+              REASON="version.json ($TAG) matches the latest release tag ($LATEST_TAG)."
+            else
+              REASON="version.json ($TAG) differs from the latest release tag ($LATEST_TAG)."
+            fi
+          fi
+          
+          if gh api "repos/${{ github.repository }}/git/ref/tags/${TAG}" >/dev/null 2>&1; then
+            SHOULD_RELEASE=false
+            REASON="Git tag ${TAG} already exists."
+          elif gh api "repos/${{ github.repository }}/releases/tags/${TAG}" >/dev/null 2>&1; then
+            SHOULD_RELEASE=false
+            REASON="A GitHub release for tag ${TAG} already exists."
+          fi
+          
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "name=${NAME}" >> "$GITHUB_OUTPUT"
+          echo "prerelease=${PRERELEASE}" >> "$GITHUB_OUTPUT"
+          echo "should_release=${SHOULD_RELEASE}" >> "$GITHUB_OUTPUT"
+          {
+            echo "description<<EOF"
+            printf '%s\n' "$DESC"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+          
+          echo "Version:        ${VERSION}"
+          echo "Tag:            ${TAG}"
+          echo "Release name:   ${NAME}"
+          echo "Prerelease:     ${PRERELEASE}"
+          echo "Latest tag:     ${LATEST_TAG:-none}"
+          echo "Should release: ${SHOULD_RELEASE}"
+          echo "Reason:         ${REASON}"
+          
+          if [ "$SHOULD_RELEASE" != "true" ]; then
+            echo "::notice::Skipping release. ${REASON}"
+          fi
+
+  build:
+    name: Build ${{ matrix.artifact_name }}
+    needs: check-version
+    if: needs.check-version.outputs.should_release == 'true'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            artifact_name: IslandSurvival-Windows
+            build_cmd: pyinstaller --add-data "IslandSurvivallogo.png;." --add-data "pfp.png;." --name "IslandSurvival" --icon "IslandSurvivallogo.ico;." --noconfirm --windowed island_survival.py
+          - os: macos-latest
+            artifact_name: IslandSurvival-macOS
+            build_cmd: pyinstaller --add-data "IslandSurvivallogo.png:." --add-data "pfp.png:." --name "IslandSurvival" --icon "IslandSurvivallogo.icns:." --noconfirm --windowed island_survival.py
+          - os: ubuntu-latest
+            artifact_name: IslandSurvival-Linux
+            build_cmd: pyinstaller --add-data "IslandSurvivallogo.png:." --add-data "pfp.png:." --name "IslandSurvival" --noconfirm island_survival.py
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Build application with PyInstaller
+        run: ${{ matrix.build_cmd }}
+
+      - name: Package dist folder
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION='${{ needs.check-version.outputs.version }}'
+          mkdir -p packaged
+          if [ -d dist ]; then
+            (cd dist && zip -r "../packaged/${{ matrix.artifact_name }}-${VERSION}.zip" .)
+          else
+            echo "::error::PyInstaller did not produce a dist/ folder."
+            exit 1
+          fi
+          ls -la packaged
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: packaged/*.zip
+          if-no-files-found: error
+          retention-days: 5
+
+  release:
+    name: Publish GitHub Release
+    needs: [check-version, build]
+    if: needs.check-version.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: List assets
+        run: ls -la release-assets
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.check-version.outputs.tag }}
+          name: ${{ needs.check-version.outputs.name }}
+          body: ${{ needs.check-version.outputs.description }}
+          generate_release_notes: true
+          prerelease: ${{ needs.check-version.outputs.prerelease }}
+          target_commitish: ${{ github.sha }}
+          files: release-assets/*
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  update-wiki:
+    name: Update GitHub Wiki
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Sync wiki.md to GitHub Wiki
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          WIKI_URL="https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.wiki.git"
+          
+          mkdir wiki-repo
+          cd wiki-repo
+          git init
+          git remote add origin "$WIKI_URL"
+          
+          # Try to fetch existing wiki content (handles both new and existing wikis)
+          if git fetch origin master 2>/dev/null; then
+            git checkout -b master origin/master
+          else
+            git checkout -b master
+          fi
+          
+          # Copy wiki.md to Home.md (the default landing page for GitHub Wikis)
+          cp ../wiki.md Home.md
+          
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          
+          git add Home.md
+          
+          # Commit and push only if there are actual changes
+          if ! git diff --cached --exit-code > /dev/null; then
+            git commit -m "Update wiki from wiki.md"
+            git push origin master
+            echo "Wiki updated successfully."
+          else
+            echo "No changes detected in wiki.md. Skipping push."
+          fi
